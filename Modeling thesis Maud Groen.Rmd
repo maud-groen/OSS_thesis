@@ -1,0 +1,297 @@
+---
+title: "Modeling thesis Maud Groen"
+output: html_document
+date: "2024-05-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The first step is loading the transformed data
+```{r}
+data <- read.csv("/Users/maudgroen/Documents/full_data.csv",header=TRUE)
+data <- select(data, -c(owner_login))
+data_transformed <-data.frame(data)
+for (i in colnames(data_transformed)){
+   if (length(unique(data_transformed[[i]])) == 2 && all(unique(data_transformed[[i]]) %in% c(0, 1))) {
+      next
+} else {
+  transformation <- bestNormalize(data[[i]])
+  data_transformed[[i]] <- predict(transformation)
+}
+}
+
+data_transformed$forks_count = data$forks_count
+data_transformed$cluster = data$cluster
+data_transformed$stargazers_count = data$stargazers_count
+data_transformed$watchers_count = data$watchers_count
+data_transformed$subscribers_count = data$subscribers_count
+
+write.csv(data_transformed, "data_with_transformations.csv", row.names=FALSE)
+data_transformed <- read.csv("/Users/maudgroen/Documents/data_with_transformations.csv")
+```
+
+Install all the packages
+```{r}
+library(ggplot2)
+library(lme4)
+library(lmerTest)
+library(MASS)
+library(car)
+library(tidyr)
+library(caret)
+library(dplyr)
+library(bestNormalize)
+library(glmmTMB)
+library(DHARMa)
+library(bbmle)
+library(MuMIn)
+library(pscl)
+library(MuMIn)
+library(fixest)
+```
+
+# Baseline model
+As a first step, we need to create the baseline models. For this we use a regular linear regression and do not incude the polynomial terms. Two different models are created, one with only the explanatory variables and one with the explanatory variables and the control variables. 
+```{r}
+baseline_model <- lm(forks_count ~ uniqueness_topic + len_topic + len_description + org_mean_topic_length + org_diversity_of_topics + org_len_description + org_average_uniqueness, data = data_transformed)
+
+baseline_model_final <- lm(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+open_issues_count+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+uniqueness_topic+len_topic+outlier_topic+no_topic+specific_topic+len_description+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+org_mean_issue_count+org_mean_topic_length+org_diversity_of_topics+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+org_len_description+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+ org_average_uniqueness +org_continent_Oceania+org_continent_South_America, data = data_transformed)
+```
+
+# Mixed-effects models
+Perform the first two mixed-effects models, namely a linear mixed effects model and a generalized linear mixed effects model
+```{r}
+model_lmer <- lmer(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2) +(1 | cluster), data = data_transformed)
+
+model_glmer <- glmer(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2) +(1 | cluster), data = data_transformed, family = poisson(link = "log"))
+```
+
+Print the summary statistics, with the estimates, standard errors and p-values
+```{r}
+summary(model_lmer)
+summary(model_glmer)
+```
+
+Compare the plots of the models using the DHARMa package, which allows us to create a Q-Q plot and residuals versus predicted plot. 
+```{r}
+model_lmer_resid <- simulateResiduals(model_lmer)
+plot(model_lmer_resid)
+
+model_glmer_resid <- simulateResiduals(model_glmer)
+plot(model_glmer_resid)
+```
+
+Compare the performance of these models using the measure determined earlier, namely the AIC
+```{r}
+AICtab(model_lmer, model_glmer)
+anova(model_lmer, model_glmer)
+```
+
+# Count data models
+Perform the four different count data models, namely zero-inflated Poisson, Poisson, zero-inflated negative binomial and negative binomial (please note than only poisson is able to execute successfully)
+```{r}
+# Zero-inflated poisson model
+model_zip <- zeroinfl(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2), data = data_transformed)
+
+model_poisson_glm <- glm(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2), data = data_transformed, family = poisson)
+
+model_neg_binom <- glm.nb(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2), data = data_transformed)
+
+model_zinb <- zeroinfl(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2) | number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2), dist = "negbin", data = data_transformed, start = list(count = initial_values_count))
+```
+
+```{r}
+summary(model_poisson_glm)
+```
+
+# GlmmTMB models
+Run the different versions of glmmTMB, the package allows us to update parameters which saves us re-writing the function multiple times. It is important to note that the hurdle modle will run into warnings and eventually stops with a time-out.  
+```{r}
+model_zi_0_binom <- glmmTMB(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2) + (1 | cluster),family=nbinom2, ziformula =~0,data = data_transformed, na.action = na.omit, control = glmmTMBControl(rank_check = "adjust",optCtrl=list(iter.max=1e3,eval.max=1e3)))
+
+# model_zi_0_binom <- update(model_zi_0_binom,family=nbinom2)
+model_zi_0_binom_1 <- update(model_zi_0_binom,family=nbinom1)
+model_zi_1_binom <- update(model_zi_0_binom,ziformula =~1,family=nbinom2)
+model_zi_1_binom_1 <- update(model_zi_0_binom,ziformula =~1,family=nbinom1)
+model_hurdle <- update(model_zi_0_binom,ziformula =~.,family=truncated_nbinom1)
+model_zi_1_poisson <- update(model_zi_0_binom, family=poisson, ziformula=~1)
+model_poisson <- update(model_zi_0_binom, family=poisson)
+```
+
+Again print the summary statistics for each model, which will allow us to see the differences in the model
+```{r}
+summary(model_zi_0_binom)
+summary(model_zi_0_binom_1)
+summary(model_zi_1_binom)
+summary(model_zi_1_binom_1)
+summary(model_zi_1_poisson)
+summary(model_poisson)
+```
+
+Compare the models in a similar manner as before, namely using the AIC measure
+```{r}
+AICtab(model_zi_0_binom, model_zi_0_binom_1, model_zi_1_binom, model_zi_1_binom_1, model_zi_1_poisson, model_poisson)
+
+anova(model_zi_0_binom, model_zi_0_binom_1, model_zi_1_binom, model_zi_1_binom_1, model_zi_1_poisson, model_poisson)
+```
+
+Finally plot the residuals of the models to check model fit
+```{r}
+resid <- simulateResiduals(model_zi_0_binom)
+plot(resid)
+
+resid <- simulateResiduals(model_zi_0_binom_1)
+plot(resid)
+
+resid <- simulateResiduals(model_zi_1_poisson)
+plot(resid)
+
+resid <- simulateResiduals(model_zi_1_binom)
+plot(resid)
+
+resid <- simulateResiduals(model_zi_1_binom_1)
+plot(resid)
+
+resid <- simulateResiduals(model_poisson)
+plot(resid)
+```
+
+Run the same models again, but for another dependent variable (namely stargazers)
+```{r}
+stargazers_model_zi_0_binom <- glmmTMB(stargazers_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2) + (1 | cluster),family=nbinom2, ziformula =~0,data = data_transformed, na.action = na.omit, control = glmmTMBControl(rank_check = "adjust",optCtrl=list(iter.max=1e3,eval.max=1e3)))
+
+# model_zi_0_binom <- update(model_zi_0_binom,family=nbinom2)
+stargazers_model_zi_0_binom_1 <- update(stargazers_model_zi_0_binom,family=nbinom1)
+stargazers_model_zi_1_binom <- update(stargazers_model_zi_0_binom,ziformula =~1,family=nbinom2)
+stargazers_model_zi_1_binom_1 <- update(stargazers_model_zi_0_binom,ziformula =~1,family=nbinom1)
+stargazers_model_zi_1_poisson <- update(stargazers_model_zi_0_binom, family=poisson, ziformula=~1)
+stargazers_model_poisson <- update(stargazers_model_zi_0_binom, family=poisson)
+
+# Compare the models using AIC
+AICtab(stargazers_model_zi_0_binom_1, stargazers_model_zi_1_binom, stargazers_model_zi_1_binom_1, stargazers_model_zi_1_poisson, stargazers_model_poisson, stargazers_model_zi_0_binom)
+```
+
+Do the same for the third dependent variable, namely the number of subscribers
+```{r}
+subscribers_model_zi_0_binom <- glmmTMB(subscribers_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+no_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_SD_size+org_mean_size+org_SD_issue_count+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Indo.European+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America + poly(org_average_uniqueness,2) + (1 | cluster),family=nbinom2, ziformula =~0,data = data_transformed, na.action = na.omit, control = glmmTMBControl(rank_check = "adjust",optCtrl=list(iter.max=1e3,eval.max=1e3)))
+
+# model_zi_0_binom <- update(model_zi_0_binom,family=nbinom2)
+subscribers_model_zi_0_binom_1 <- update(subscribers_model_zi_0_binom,family=nbinom1)
+subscribers_model_zi_1_binom <- update(subscribers_model_zi_0_binom,ziformula =~1,family=nbinom2)
+subscribers_model_zi_1_binom_1 <- update(subscribers_model_zi_0_binom,ziformula =~1,family=nbinom1)
+subscribers_model_zi_1_poisson <- update(subscribers_model_zi_0_binom, family=poisson, ziformula=~1)
+subscribers_model_poisson <- update(subscribers_model_zi_0_binom, family=poisson)
+
+AICtab(subscribers_model_zi_0_binom_1, subscribers_model_zi_1_binom, subscribers_model_zi_1_binom_1, subscribers_model_zi_1_poisson, subscribers_model_poisson, subscribers_model_zi_0_binom)
+```
+
+As a final step, select the best performing model for both dependent variables and compare whether there are big differences for different dependent variables
+```{r}
+summary(stargazers_model_zi_0_binom)
+summary(subscribers_model_zi_1_binom)
+```
+
+Same as before, compare the models using different dependent variables
+```{r}
+AICtab(stargazers_model_zi_0_binom, subscribers_model_zi_1_binom, model_zi_0_binom)
+
+anova(stargazers_model_zi_0_binom, subscribers_model_zi_1_binom, model_zi_0_binom)
+```
+
+Also check the fit using the DHARMa package
+```{r}
+resid <- simulateResiduals(subscribers_model_zi_1_binom)
+plot(resid)
+
+resid <- simulateResiduals(stargazers_model_zi_0_binom_1)
+plot(resid)
+
+resid <- simulateResiduals(model_zi_0_binom)
+plot(resid)
+```
+
+# Fixest model
+As a final step, two models need to be run, the multi-level negative binomial model and the multi-level Poisson model from the fixest package. 
+Since we can specify the formula seperately, this only needs to be defined once.
+
+```{r}
+formula <- forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+poly(len_topic,2)+outlier_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_mean_size+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+poly(org_average_uniqueness,2) +org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_continent_Oceania+org_continent_South_America
+
+model_nb_fixed <- fenegbin(formula, data = data_transformed, cluster = ~ cluster)
+model_poisson_fixed <- feglm(formula, data = data_transformed, family = poisson(), cluster = ~ cluster)
+```
+
+Run the statistics on these two models, namely the summary statistics, some model performance statistics and the AIC.
+```{r}
+summary(model_nb_fixed)
+summary(model_poisson_fixed)
+
+fixest::r2(model_nb_fixed)
+fixest::r2(model_poisson_fixed)
+
+AIC(model_nb_fixed, model_poisson_fixed)
+```
+
+# Model comparison
+As a final step, we want to compare all models using R-squared.
+Since the regular R-squared does not work for glmmTMB models, another one needs to be installed using the performance package.
+
+```{r}
+# install.packages(c("insight","performance"), repos = "https://easystats.r-universe.dev")
+performance::r2(model_lmer)
+performance::r2(model_glmer)
+
+performance::r2(model_poisson_glm)
+
+performance::r2(model_zi_0_binom)
+performance::r2(model_zi_0_binom_1)
+performance::r2(model_zi_1_binom)
+performance::r2(model_zi_1_binom_1)
+performance::r2(model_zi_1_poisson)
+performance::r2(model_poisson)
+
+performance::r2(subscribers_model_zi_1_binom)
+performance::r2(stargazers_model_zi_0_binom)
+
+# For the baseline models, we can use another package
+r.squaredGLMM(baseline_model)
+r.squaredGLMM(baseline_model_final)
+```
+
+After performing a check on collinearity, we determine that we need to drop multiple variables, this is done for all final models
+```{r}
+performance::check_collinearity(model_zi_0_binom)
+
+# Drop no_topic, org_SD_size,org_SD_issue_count, org_Description_Indo.European, poly(len_topic,2)
+final_without_cor <- glmmTMB(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+outlier_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_mean_size+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+poly(org_average_uniqueness,2) + org_continent_Oceania+org_continent_South_America + (1 | cluster),family=nbinom2, ziformula =~0,data = data_transformed, na.action = na.omit, control = glmmTMBControl(rank_check = "adjust",optCtrl=list(iter.max=1e3,eval.max=1e3)))
+
+summary(final_without_cor)
+```
+
+```{r}
+stargazers_without_cor <- glmmTMB(stargazers_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+outlier_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_mean_size+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+poly(org_average_uniqueness,2) + org_continent_Oceania+org_continent_South_America + (1 | cluster),family=nbinom2, ziformula =~0,data = data_transformed, na.action = na.omit, control = glmmTMBControl(rank_check = "adjust",optCtrl=list(iter.max=1e3,eval.max=1e3)))
+
+subscribers_without_cor <- glmmTMB(subscribers_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+poly(uniqueness_topic,2)+outlier_topic+specific_topic+poly(len_description,2)+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_mean_size+poly(org_mean_issue_count,2)+poly(org_mean_topic_length,2)+poly(org_diversity_of_topics,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+poly(org_len_description,2)+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+poly(org_average_uniqueness,2) + org_continent_Oceania+org_continent_South_America + (1 | cluster),family=nbinom2, ziformula =~0,data = data_transformed, na.action = na.omit, control = glmmTMBControl(rank_check = "adjust",optCtrl=list(iter.max=1e3,eval.max=1e3)))
+```
+
+# Model in seperate parts
+As a final step, we run the final model in three different parts so that we can check what the impact on the estimates and standard errors is when introducing new terms. 
+The first model contains only the control variables, the second model the control variables and the linear terms of the explanatory variables and the third model has the control variables, the linear and the quadratic terms of the explanatory variables. 
+
+```{r}
+model_control <-glmmTMB(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+outlier_topic+specific_topic+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_mean_size+poly(org_mean_issue_count,2)+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America + org_continent_Oceania+org_continent_South_America + (1 | cluster),family=nbinom2, ziformula =~0,data = data_transformed, na.action = na.omit, control = glmmTMBControl(rank_check = "adjust",optCtrl=list(iter.max=1e3,eval.max=1e3)))
+
+model_control_linear <- glmmTMB(forks_count ~ number_of_commits+number_of_tags+number_of_events+Number_of_languages+Percentage_biggest_language+cluster_Low.Level_Language+cluster_Medium.Level_Language+cluster_High.Level_Language+cluster_Non.programming_languages+main_master_dev_count+release_count+hotfix_count+feature_count+has_homepage+size+has_projects+has_downloads+has_wiki+has_pages+has_discussions+poly(open_issues_count,2)+is_template+web_commit_signoff_required+time_active+weak_copyleft_license+strong_copyleft_license+permissive_license+uniqueness_topic+outlier_topic+specific_topic+len_description+description_Niger.Congo+description_Austronesian+description_Sino.Tibetan+description_Indo.European+description_Afro.Asiatic+description_Other+org_projects_overlap+org_owner_count_members+org_owner_count_event+org_Description_language_ratio+org_percentage_has_homepage+org_percentage_has_pages+org_percentage_archived+org_percentage_is_template+org_percentage_has_wiki+org_percentage_has_downloads+org_percentage_has_discussions+org_percentage_has_projects+org_Mean_time_active+org_stargazers_mean+org_forks_mean+org_Language_Ratio+org_License_Ratio+org_mean_size+poly(org_mean_issue_count,2)+org_mean_topic_length+org_diversity_of_topics+org_has_twitter+org_has_email+org_has_blog+org_is_verified+org_has_organization_projects+org_has_repository_projects+org_public_repos+org_public_gists+org_followers+org_time_active+org_len_description+org_Description_Niger.Congo+org_Description_Austronesian+org_Description_Sino.Tibetan+org_Description_Afro.Asiatic+org_Description_Other+org_outlier_topic+org_no_topic+org_specific_topic+org_continent_Africa+org_continent_Asia+org_continent_Europe+org_continent_Global+org_continent_North_America+org_average_uniqueness + org_continent_Oceania+org_continent_South_America + (1 | cluster),family=nbinom2, ziformula =~0,data = data_transformed, na.action = na.omit, control = glmmTMBControl(rank_check = "adjust",optCtrl=list(iter.max=1e3,eval.max=1e3)))
+
+# As a final check we want to compare the model performance of all three models
+performance::r2(model_control_linear)
+performance::r2(model_control)
+performance::r2(final_without_cor)
+
+AICtab(model_control, model_control_linear, model_zi_0_binom)
+
+summary(model_control)
+summary(model_control_linear)
+```
